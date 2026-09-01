@@ -11,9 +11,6 @@ def test_health_endpoint():
     assert response.json() == {"status": "ok"}
 
 
-def test_ask_endpoint_returns_structured_placeholder():
-    response = client.post("/ask", json={"question": "How do I request a notebook?"})
-    assert response.status_code == 200
-    body = response.json()
-    assert set(body) == {"answer", "sources", "grounded"}
-    assert body["grounded"] is False
+def test_question_validation_rejects_short_input():
+    response = client.post("/ask", json={"question": "a"})
+    assert response.status_code == 422
