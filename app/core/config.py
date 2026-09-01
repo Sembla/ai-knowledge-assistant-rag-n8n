@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "AI Knowledge Assistant"
     app_env: str = "development"
-    database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/knowledge"
+    database_url: str = "postgresql+psycopg://postgres:postgres@db:5432/knowledge_assistant"
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-5.6-luna"
     openai_embedding_model: str = "text-embedding-3-small"
