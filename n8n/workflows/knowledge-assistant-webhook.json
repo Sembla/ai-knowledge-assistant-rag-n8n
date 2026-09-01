@@ -1,0 +1,88 @@
+{
+  "name": "AI Knowledge Assistant - RAG API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "knowledge-assistant",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Question Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "knowledge-assistant"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $json.body ?? $json;\nconst question = String(body.question ?? '').trim();\nif (question.length < 3) {\n  throw new Error('question must contain at least 3 characters');\n}\nreturn [{ json: { question } }];"
+      },
+      "id": "code-1",
+      "name": "Validate Question",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/ask",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ question: $json.question }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "http-1",
+      "name": "Call RAG API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "respond-1",
+      "name": "Return Answer",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [720, 0]
+    }
+  ],
+  "connections": {
+    "Question Webhook": {
+      "main": [[{"node": "Validate Question", "type": "main", "index": 0}]]
+    },
+    "Validate Question": {
+      "main": [[{"node": "Call RAG API", "type": "main", "index": 0}]]
+    },
+    "Call RAG API": {
+      "main": [[{"node": "Return Answer", "type": "main", "index": 0}]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "portfolio-rag-v1",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "tags": []
+}
