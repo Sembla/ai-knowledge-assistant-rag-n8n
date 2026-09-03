@@ -1,29 +1,31 @@
 # AI Knowledge Assistant — RAG + n8n
 
-A portfolio project that implements a Retrieval-Augmented Generation (RAG) assistant with **Python, FastAPI, OpenAI, PostgreSQL/pgvector, Docker and n8n**.
+A functional portfolio project implementing a Retrieval-Augmented Generation (RAG) knowledge assistant with **Python, FastAPI, OpenAI, PostgreSQL/pgvector, Docker and n8n**.
 
-The assistant retrieves relevant knowledge-base chunks before asking an LLM to answer. It returns the generated answer together with the retrieved sources and a grounded flag. If retrieval does not find enough evidence, the assistant refuses to invent an answer.
+The assistant retrieves relevant knowledge-base chunks before asking an LLM to answer. It returns the generated answer together with its retrieved sources, similarity scores and a `grounded` flag. If retrieval does not find enough evidence, the assistant refuses to invent an answer.
 
-> Portfolio boundary: every document in this repository is fictional. No confidential company data, credentials or internal processes are included.
+> **Portfolio boundary:** every knowledge-base document in this repository is fictional. No confidential company data, credentials or internal processes are included.
 
-## Status
+## Current status
 
-**MVP RAG implemented on `feature/full-rag-mvp`.**
+The MVP is functional and has been validated locally through the API, the n8n webhook and an automated regression suite.
 
 Implemented:
 - FastAPI REST API
-- document ingestion from Markdown/TXT files
+- Markdown/TXT document ingestion
 - deterministic text chunking with overlap
 - OpenAI embeddings
 - PostgreSQL + pgvector persistence
 - cosine-similarity retrieval
-- minimum retrieval-score safeguard
-- source-grounded LLM generation through the Responses API
-- structured output with `answer`, `sources` and `grounded`
+- configurable top-k retrieval
+- minimum similarity safeguard (`RETRIEVAL_MIN_SCORE=0.45`)
+- source-grounded LLM generation
+- structured `answer`, `sources` and `grounded` output
+- explicit insufficient-evidence fallback
 - Docker Compose for API, pgvector and n8n
-- importable n8n webhook workflow
-- fictional sample documents
-- unit/API tests
+- importable n8n webhook orchestration
+- fictional sample knowledge base
+- automated unit, API and RAG grounding tests
 - GitHub Actions CI foundation
 
 ## Architecture
@@ -35,7 +37,7 @@ Client / User
 n8n Webhook
      |
      v
-Validate input
+Input normalization
      |
      v
 FastAPI /ask
@@ -45,16 +47,20 @@ FastAPI /ask
      |             v
      +----> pgvector similarity search
      |             |
-     |             v
-     |       retrieved chunks
-     |             |
-     +-------------+
-     |
-     v
-OpenAI Responses API
-     |
-     v
-Grounded answer + sources + retrieval scores
+     |      score >= threshold?
+     |          /       \
+     |        no         yes
+     |        |           |
+     |        v           v
+     |    safe fallback  retrieved context
+     |                    |
+     +--------------------+
+                          |
+                          v
+                 OpenAI Responses API
+                          |
+                          v
+              Grounded answer + sources
 ```
 
 Document ingestion is a separate path:
@@ -93,7 +99,7 @@ app/
 
 data/sample_docs/          fictional knowledge base
 n8n/workflows/              importable n8n workflow
-tests/                      automated tests
+tests/                      automated regression suite
 ```
 
 ## Local setup
@@ -109,7 +115,6 @@ tests/                      automated tests
 ```bash
 git clone https://github.com/Sembla/ai-knowledge-assistant-rag-n8n.git
 cd ai-knowledge-assistant-rag-n8n
-git checkout feature/full-rag-mvp
 ```
 
 ### 3. Configure environment
@@ -124,7 +129,7 @@ notepad .env
 Set only your local key:
 
 ```env
-OPENAI_API_KEY=your_new_key_here
+OPENAI_API_KEY=your_key_here
 ```
 
 Never commit `.env`. It is ignored by `.gitignore`.
@@ -192,34 +197,32 @@ Response shape:
     {
       "document": "it_equipment_policy.md",
       "excerpt": "...",
-      "score": 0.0
+      "score": 0.6238
     }
   ],
   "grounded": true
 }
 ```
 
-Try a question that is not covered by the fictional documents. When no retrieved chunk reaches the configured threshold, the system returns an insufficient-evidence answer instead of intentionally inventing a policy.
+Questions outside the fictional knowledge base return an insufficient-evidence response with no accepted sources and `grounded: false`.
 
 ## n8n orchestration
 
 1. Open `http://localhost:5678`.
 2. Complete the local n8n setup if requested.
 3. Import `n8n/workflows/knowledge-assistant-webhook.json`.
-4. Open the workflow and test it.
-5. Activate it when ready.
+4. Open and test the workflow.
+5. Activate/publish it when ready.
 
 The workflow performs:
 
 ```text
-Webhook -> input validation -> FastAPI /ask -> webhook response
+Webhook -> input normalization -> FastAPI /ask -> webhook response
 ```
 
 Because n8n and FastAPI run in the same Docker Compose network, the workflow calls the API at `http://api:8000/ask`.
 
 ## Configuration
-
-Important `.env` options:
 
 | Variable | Purpose |
 |---|---|
@@ -232,25 +235,82 @@ Important `.env` options:
 | `CHUNK_SIZE` | maximum chunk size in characters |
 | `CHUNK_OVERLAP` | repeated context between adjacent chunks |
 
-## Reliability choices
+The current portfolio baseline uses `RETRIEVAL_MIN_SCORE=0.45`. This value was selected to reject unrelated questions in the sample corpus while retaining the supported evaluation questions; it is a demo threshold, not a universal production value.
 
-- the model is instructed to answer only from retrieved context
-- retrieval uses an explicit minimum score
-- no matching context produces an insufficient-evidence response
-- returned sources make retrieval inspectable
+## Reliability and hallucination controls
+
+- the model is instructed to answer from retrieved context
+- retrieval uses an explicit minimum similarity score
+- low-confidence retrieval is discarded before generation
+- no accepted context produces a deterministic insufficient-evidence fallback
+- returned sources and scores make retrieval inspectable
 - API input is validated with Pydantic
 - services are isolated with Docker Compose
 - database health is checked before the API starts
 - secrets remain outside Git through `.env`
 
-## Tests
+## Automated tests
+
+Run the suite inside the API container:
 
 ```bash
-pytest -q
+docker compose exec api pytest -v
 ```
 
-Current tests cover the health endpoint, request validation and chunking behavior. End-to-end tests that call the external LLM API are intentionally separate from the deterministic unit-test layer.
+The suite covers:
+- chunk splitting and overlap
+- blank-input chunking
+- invalid overlap validation
+- `/health`
+- `/ask` request validation
+- notebook-policy grounding
+- access-policy grounding
+- purchasing-policy grounding
+- unsupported-question fallback
 
-## Portfolio scope
+### Validated local run
 
-This repository demonstrates a functional learning/portfolio implementation. It does **not** claim enterprise-scale production deployment. Natural next steps include structured observability, retries/backoff for external APIs, evaluation datasets, reranking, authentication, rate limiting, cost tracking, CI end-to-end tests, cloud deployment and an MCP interface.
+The current implementation was manually validated on **September 2, 2026** with:
+
+```text
+collected 9 items
+9 passed, 1 warning in 11.92s
+```
+
+The warning observed in that run was a dependency deprecation warning from the Starlette/AnyIO test stack, not a failed application test.
+
+The three supported RAG evaluation questions selected their expected source documents, while a vacation-policy question outside the knowledge base returned `grounded: false` with an empty accepted-source list.
+
+> The RAG regression tests call the configured embedding/LLM services and therefore are integration-style tests rather than fully deterministic offline unit tests. They may consume API credits.
+
+## What this project demonstrates
+
+This repository provides hands-on evidence of:
+- RAG architecture
+- embeddings and vector similarity search
+- pgvector
+- retrieval thresholds and hallucination safeguards
+- LLM API integration
+- FastAPI
+- REST/webhook integration
+- n8n orchestration
+- Dockerized services
+- automated regression testing
+- source traceability
+- explicit handling of insufficient knowledge
+
+## Portfolio scope and next steps
+
+This is a functional learning/portfolio implementation, **not an enterprise-scale production deployment**.
+
+Natural next steps:
+- structured observability and request tracing
+- latency and token/cost metrics
+- retries/backoff for external APIs
+- a larger evaluation dataset and retrieval metrics
+- reranking
+- authentication and rate limiting
+- cloud deployment
+- CI integration tests with controlled credentials
+- optional Flowise comparison
+- an MCP interface
