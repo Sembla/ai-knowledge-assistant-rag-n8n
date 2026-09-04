@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     openai_embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
     retrieval_top_k: int = 4
-    retrieval_min_score: float = 0.25
+    retrieval_min_score: float = 0.45
     chunk_size: int = 900
     chunk_overlap: int = 150
 
