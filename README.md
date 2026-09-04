@@ -26,7 +26,7 @@ Implemented:
 - importable n8n webhook orchestration
 - fictional sample knowledge base
 - automated unit, API and RAG grounding tests
-- GitHub Actions CI foundation
+- GitHub Actions CI for deterministic unit/API checks
 
 ## Architecture
 
@@ -251,13 +251,25 @@ The current portfolio baseline uses `RETRIEVAL_MIN_SCORE=0.45`. This value was s
 
 ## Automated tests
 
-Run the suite inside the API container:
+### Public CI
+
+GitHub Actions runs the deterministic tests that do not require external credentials or a live vector database:
+
+```bash
+pytest -q tests/test_chunking.py tests/test_health.py
+```
+
+This keeps pull-request and push checks reproducible and prevents public CI from depending on an OpenAI key.
+
+### Full local RAG evaluation
+
+Run the complete suite inside the Dockerized API environment:
 
 ```bash
 docker compose exec api pytest -v
 ```
 
-The suite covers:
+The full suite covers:
 - chunk splitting and overlap
 - blank-input chunking
 - invalid overlap validation
@@ -270,7 +282,7 @@ The suite covers:
 
 ### Validated local run
 
-The current implementation was manually validated on **September 2, 2026** with:
+The current implementation was manually validated with:
 
 ```text
 collected 9 items
